@@ -1,0 +1,874 @@
+{
+  "description": "🧠 AGENTIC-RAG-Ω — Marketing Knowledge Engine (Flowise)",
+  "name": "AGENTIC-RAG-Ω Marketing Agent",
+  "nodes": [
+    {
+      "id": "chatOpenAI_0",
+      "position": {
+        "x": 600,
+        "y": -200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatOpenAI_0",
+        "label": "GPT-4o",
+        "version": 2,
+        "name": "chatOpenAI",
+        "type": "ChatOpenAI",
+        "baseClasses": [
+          "ChatOpenAI",
+          "BaseChatModel",
+          "BaseLanguageModel",
+          "Runnable"
+        ],
+        "category": "Chat Models",
+        "description": "Chat completion using OpenAI GPT-4o",
+        "credentialNames": [
+          "openAIApi"
+        ],
+        "inputParams": [
+          {
+            "label": "Model Name",
+            "name": "modelName",
+            "type": "string",
+            "default": "gpt-4o",
+            "id": "chatOpenAI_0-input-modelName-string"
+          },
+          {
+            "label": "Temperature",
+            "name": "temperature",
+            "type": "number",
+            "default": 0.7,
+            "id": "chatOpenAI_0-input-temperature-number"
+          },
+          {
+            "label": "Max Tokens",
+            "name": "maxTokens",
+            "type": "number",
+            "optional": true,
+            "id": "chatOpenAI_0-input-maxTokens-number"
+          }
+        ],
+        "inputs": {
+          "modelName": "gpt-4o",
+          "temperature": 0.7,
+          "maxTokens": 2500
+        },
+        "outputAnchors": [
+          {
+            "id": "chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable",
+            "name": "chatOpenAI",
+            "label": "ChatOpenAI",
+            "type": "ChatOpenAI | BaseChatModel | BaseLanguageModel | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "chatPromptTemplate_0",
+      "position": {
+        "x": 200,
+        "y": -200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatPromptTemplate_0",
+        "label": "AGENTIC-RAG-Ω Prompt",
+        "version": 2,
+        "name": "chatPromptTemplate",
+        "type": "ChatPromptTemplate",
+        "baseClasses": [
+          "BaseChatPromptTemplate",
+          "BasePromptTemplate"
+        ],
+        "category": "Prompts",
+        "description": "System prompt for AGENTIC-RAG-Ω marketing engine",
+        "inputParams": [
+          {
+            "label": "System Message",
+            "name": "systemMessagePrompt",
+            "type": "string",
+            "rows": 12,
+            "default": "You are AGENTIC-RAG-Ω...",
+            "id": "chatPromptTemplate_0-input-systemMessagePrompt-string"
+          },
+          {
+            "label": "Human Message",
+            "name": "humanMessagePrompt",
+            "type": "string",
+            "rows": 4,
+            "default": "{input}",
+            "id": "chatPromptTemplate_0-input-humanMessagePrompt-string"
+          }
+        ],
+        "inputs": {
+          "systemMessagePrompt": "You are AGENTIC-RAG-Ω, an autonomous marketing intelligence engine.\n\nYOUR CORE LOOP:\n1. PLAN — Determine what knowledge is required\n2. RETRIEVE — Use tools to fetch data from memory, performance, brand rules\n3. FILTER/RERANK/GRADE — Evaluate evidence quality\n4. VERIFY/REASON — Check for conflicts\n5. SYNTHESIZE — Create strategic recommendation\n6. GENERATE — Produce image prompt and content brief\n7. PUBLISH — Post to social media\n8. SAVE — Store new knowledge\n\nRULES:\n- Always retrieve evidence before making claims\n- Grade evidence on: relevance, authority, freshness, business fit, performance relevance\n- If evidence is insufficient, say so explicitly\n- Preserve conflicting viewpoints\n- Return confidence score (0.0-1.0)\n- Generate DALL-E prompts for images\n- Prepare video generation prompts\n\nWhen given a marketing task, follow the full loop and use the available tools.",
+          "humanMessagePrompt": "{input}"
+        },
+        "outputAnchors": [
+          {
+            "id": "chatPromptTemplate_0-output-chatPromptTemplate-BaseChatPromptTemplate|BasePromptTemplate",
+            "name": "chatPromptTemplate",
+            "label": "BaseChatPromptTemplate",
+            "type": "BaseChatPromptTemplate | BasePromptTemplate"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "bufferMemory_0",
+      "position": {
+        "x": 600,
+        "y": 200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "bufferMemory_0",
+        "label": "Buffer Memory",
+        "version": 2,
+        "name": "bufferMemory",
+        "type": "BufferMemory",
+        "baseClasses": [
+          "BufferMemory",
+          "BaseChatMemory",
+          "BaseMemory"
+        ],
+        "category": "Memory",
+        "description": "Remembers previous conversational back and forths",
+        "inputParams": [
+          {
+            "label": "Memory Key",
+            "name": "memoryKey",
+            "type": "string",
+            "default": "chat_history",
+            "id": "bufferMemory_0-input-memoryKey-string"
+          },
+          {
+            "label": "Input Key",
+            "name": "inputKey",
+            "type": "string",
+            "default": "input",
+            "id": "bufferMemory_0-input-inputKey-string"
+          }
+        ],
+        "inputs": {
+          "memoryKey": "chat_history",
+          "inputKey": "input"
+        },
+        "outputAnchors": [
+          {
+            "id": "bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory",
+            "name": "bufferMemory",
+            "label": "BufferMemory",
+            "type": "BufferMemory | BaseChatMemory | BaseMemory"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "openAIFunctionAgent_0",
+      "position": {
+        "x": 1000,
+        "y": 0
+      },
+      "type": "customNode",
+      "data": {
+        "id": "openAIFunctionAgent_0",
+        "label": "AGENTIC-RAG-Ω Agent",
+        "version": 2,
+        "name": "openAIFunctionAgent",
+        "type": "Agent",
+        "baseClasses": [
+          "AgentExecutor",
+          "BaseChain",
+          "Runnable"
+        ],
+        "category": "Agents",
+        "description": "OpenAI Function Agent that executes the AGENTIC-RAG-Ω loop",
+        "inputParams": [
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string",
+            "rows": 4,
+            "default": "You are a marketing intelligence agent.",
+            "optional": true,
+            "id": "openAIFunctionAgent_0-input-systemMessage-string"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number",
+            "default": 10,
+            "optional": true,
+            "id": "openAIFunctionAgent_0-input-maxIterations-number"
+          }
+        ],
+        "inputs": {
+          "systemMessage": "Execute the AGENTIC-RAG-Ω marketing loop using available tools. Always retrieve evidence before creating content.",
+          "maxIterations": 10
+        },
+        "outputAnchors": [
+          {
+            "id": "openAIFunctionAgent_0-output-openAIFunctionAgent-AgentExecutor|BaseChain|Runnable",
+            "name": "openAIFunctionAgent",
+            "label": "AgentExecutor",
+            "type": "AgentExecutor | BaseChain | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_0",
+      "position": {
+        "x": 1400,
+        "y": -400
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_0",
+        "label": "Retrieve Memory",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Retrieves marketing memory from PostgreSQL database",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "retrieve_memory",
+            "id": "customTool_0-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Retrieves marketing knowledge patterns from memory.",
+            "id": "customTool_0-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_0-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "retrieve_memory",
+          "toolDescription": "Retrieves marketing knowledge patterns from memory database. Use this to get historical insights, performance patterns, and learned marketing knowledge. Input should be a JSON object with 'query' (string) and 'knowledge_types' (array of strings like ['performance_pattern', 'audience_insight', 'trend_signal']).",
+          "code": "async function run({ query, knowledge_types }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/retrieve-memory', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ query, knowledge_types })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_0-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_1",
+      "position": {
+        "x": 1400,
+        "y": -200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_1",
+        "label": "Retrieve Performance",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Retrieves campaign performance analytics",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "retrieve_performance",
+            "id": "customTool_1-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Retrieves campaign performance data.",
+            "id": "customTool_1-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_1-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "retrieve_performance",
+          "toolDescription": "Retrieves campaign performance analytics including CTR, ROAS, conversions, impressions, and creative angles. Use this to understand what content performed best. Input should be a JSON object with 'brand' (string), 'platform' (string), and 'days' (number, default 90).",
+          "code": "async function run({ brand, platform, days = 90 }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/retrieve-performance', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ brand, platform, days })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_1-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_2",
+      "position": {
+        "x": 1400,
+        "y": 0
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_2",
+        "label": "Retrieve Brand Rules",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Retrieves brand voice, values, and guidelines",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "retrieve_brand_rules",
+            "id": "customTool_2-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Retrieves brand knowledge.",
+            "id": "customTool_2-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_2-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "retrieve_brand_rules",
+          "toolDescription": "Retrieves brand voice, values, guidelines, and positioning rules. Use this to ensure content aligns with brand identity. Input should be a JSON object with 'brand' (string).",
+          "code": "async function run({ brand }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/retrieve-brand', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ brand })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_2-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_3",
+      "position": {
+        "x": 1400,
+        "y": 200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_3",
+        "label": "Generate Image",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Generates marketing images using DALL-E 3",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "generate_image",
+            "id": "customTool_3-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Generates images using DALL-E.",
+            "id": "customTool_3-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_3-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "generate_image",
+          "toolDescription": "Generates a marketing image using DALL-E 3 based on a detailed prompt. Use this after creating the visual concept. Input should be a JSON object with 'prompt' (string, detailed DALL-E prompt) and 'size' (string, default '1024x1024'). Returns the image URL.",
+          "code": "async function run({ prompt, size = '1024x1024' }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/generate-image', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ prompt, size })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_3-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_4",
+      "position": {
+        "x": 1400,
+        "y": 400
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_4",
+        "label": "Publish Instagram",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Publishes content to Instagram",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "publish_instagram",
+            "id": "customTool_4-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Publishes to Instagram.",
+            "id": "customTool_4-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_4-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "publish_instagram",
+          "toolDescription": "Publishes an image with caption to Instagram. Use this after generating the image. Input should be a JSON object with 'image_url' (string) and 'caption' (string including hashtags).",
+          "code": "async function run({ image_url, caption }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/publish-instagram', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ image_url, caption })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_4-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_5",
+      "position": {
+        "x": 1400,
+        "y": 600
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_5",
+        "label": "Publish Facebook",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Publishes content to Facebook",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "publish_facebook",
+            "id": "customTool_5-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Publishes to Facebook.",
+            "id": "customTool_5-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_5-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "publish_facebook",
+          "toolDescription": "Publishes an image with message to Facebook Page. Use this after generating the image. Input should be a JSON object with 'image_url' (string) and 'message' (string).",
+          "code": "async function run({ image_url, message }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/publish-facebook', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ image_url, message })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_5-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_6",
+      "position": {
+        "x": 1400,
+        "y": 800
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_6",
+        "label": "Publish LinkedIn",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Publishes content to LinkedIn",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "publish_linkedin",
+            "id": "customTool_6-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Publishes to LinkedIn.",
+            "id": "customTool_6-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_6-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "publish_linkedin",
+          "toolDescription": "Publishes a post with image to LinkedIn. Use this for professional content. Input should be a JSON object with 'image_url' (string) and 'text' (string).",
+          "code": "async function run({ image_url, text }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/publish-linkedin', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ image_url, text })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_6-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "customTool_7",
+      "position": {
+        "x": 1400,
+        "y": 1000
+      },
+      "type": "customNode",
+      "data": {
+        "id": "customTool_7",
+        "label": "Save Memory",
+        "version": 2,
+        "name": "customTool",
+        "type": "CustomTool",
+        "baseClasses": [
+          "CustomTool",
+          "Tool",
+          "StructuredTool",
+          "Runnable"
+        ],
+        "category": "Tools",
+        "description": "Saves new marketing knowledge to database",
+        "inputParams": [
+          {
+            "label": "Tool Name",
+            "name": "toolName",
+            "type": "string",
+            "default": "save_memory",
+            "id": "customTool_7-input-toolName-string"
+          },
+          {
+            "label": "Tool Description",
+            "name": "toolDescription",
+            "type": "string",
+            "rows": 4,
+            "default": "Saves knowledge to memory.",
+            "id": "customTool_7-input-toolDescription-string"
+          },
+          {
+            "label": "JavaScript Code",
+            "name": "code",
+            "type": "code",
+            "rows": 12,
+            "default": "",
+            "id": "customTool_7-input-code-code"
+          }
+        ],
+        "inputs": {
+          "toolName": "save_memory",
+          "toolDescription": "Saves new marketing knowledge to the memory database for future retrieval. Use this after completing a task. Input should be a JSON object with 'insight' (string), 'knowledge_type' (string), 'confidence' (number), and 'scope' (string).",
+          "code": "async function run({ insight, knowledge_type, confidence, scope }) {\n  const fetch = require('node-fetch');\n  const response = await fetch('http://host.docker.internal:5678/webhook/save-memory', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ insight, knowledge_type, confidence, scope })\n  });\n  const data = await response.json();\n  return JSON.stringify(data);\n}"
+        },
+        "outputAnchors": [
+          {
+            "id": "customTool_7-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+            "name": "customTool",
+            "label": "CustomTool",
+            "type": "CustomTool | Tool | StructuredTool | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "chatPromptTemplate_0",
+      "sourceHandle": "chatPromptTemplate_0-output-chatPromptTemplate-BaseChatPromptTemplate|BasePromptTemplate",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-prompt-BaseChatPromptTemplate",
+      "type": "buttonedge",
+      "id": "edge-prompt",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "chatOpenAI_0",
+      "sourceHandle": "chatOpenAI_0-output-chatOpenAI-ChatOpenAI|BaseChatModel|BaseLanguageModel|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-model-BaseChatModel",
+      "type": "buttonedge",
+      "id": "edge-model",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "bufferMemory_0",
+      "sourceHandle": "bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-memory-BaseChatMemory",
+      "type": "buttonedge",
+      "id": "edge-memory",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_0",
+      "sourceHandle": "customTool_0-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-0",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_1",
+      "sourceHandle": "customTool_1-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-1",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_2",
+      "sourceHandle": "customTool_2-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-2",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_3",
+      "sourceHandle": "customTool_3-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-3",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_4",
+      "sourceHandle": "customTool_4-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-4",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_5",
+      "sourceHandle": "customTool_5-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-5",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_6",
+      "sourceHandle": "customTool_6-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-6",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "customTool_7",
+      "sourceHandle": "customTool_7-output-customTool-CustomTool|Tool|StructuredTool|Runnable",
+      "target": "openAIFunctionAgent_0",
+      "targetHandle": "openAIFunctionAgent_0-input-tools-Tool",
+      "type": "buttonedge",
+      "id": "edge-tool-7",
+      "data": {
+        "label": ""
+      }
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 0.8
+  }
+}

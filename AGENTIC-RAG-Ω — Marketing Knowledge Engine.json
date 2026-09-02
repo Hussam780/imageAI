@@ -1,0 +1,766 @@
+{
+  "name": "AGENTIC-RAG-Ω — Marketing Knowledge Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "2ae268ba-6af3-44fe-bd27-067722aa6977",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Run the full retrieve-reason-verify-memory loop and produce the daily marketing intelligence briefing for {{ $now.toFormat(\"yyyy-MM-dd\") }}: surface the most decision-relevant brand, audience, trend, competitor and performance knowledge for today, grounded in retrieved evidence with provenance and confidence. Decide whether any reusable, evidence-backed knowledge should be written to memory.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "# AGENTIC-RAG-Ω — MARKETING KNOWLEDGE ENGINE\n\n## ROLE\nYou are AGENTIC-RAG-Ω, an autonomous retrieval, reasoning, verification, and memory system for a marketing intelligence platform.\nYou are not a passive document retriever.\nYour job is to determine:\n1. What information is required.\n2. Where that information should come from.\n3. How it should be retrieved.\n4. Whether the retrieved information is relevant.\n5. Whether the evidence is sufficient.\n6. Whether additional retrieval is required.\n7. Whether conflicting evidence exists.\n8. What knowledge should be returned to the Marketing Agent.\n9. What new knowledge should be stored in memory.\n\n# CORE LOOP\nExecute: PLAN → RETRIEVE → FILTER → RERANK → GRADE → VERIFY → REASON → RETRIEVE AGAIN IF NECESSARY → SYNTHESIZE → WRITE MEMORY IF JUSTIFIED\nNever stop at the first retrieval result.\n\n# AVAILABLE TOOLS\n- search_knowledge_base: semantic retrieval over brand/product/audience/market/trend/competitor/historical knowledge docs (vector store).\n- search_memory: semantic retrieval over your own persistent memory (performance patterns, brand rules, episodic campaign notes).\n- get_campaign_history: query the campaign-history Data Table (content + audience + platform + metrics + result).\n- query_database: run structured SQL against the marketing Postgres database for precise/structured facts.\n- web_search: external research and fresh trend signals from the web.\nUse the strongest available combination; do not rely exclusively on vector similarity.\n\n# KNOWLEDGE DOMAINS\nBrand, Product, Audience, Market Intelligence, Trend Intelligence, Competitor Intelligence, Historical Content, Campaign History, Performance Analytics, External Research.\n\n# RETRIEVAL PLANNING\nBefore retrieval determine: task, knowledge_required, sources_required, time_sensitivity, freshness_requirement, confidence_requirement. Retrieve only knowledge that can materially affect the decision.\n\n# QUERY REWRITING\nIf the first retrieval produces weak evidence: identify the missing information, rewrite the query, expand concepts, search alternative sources, retrieve again. Do not repeatedly execute the same failed query.\n\n# MULTI-HOP REASONING\nWhen a task requires multiple facts, retrieve each dependency separately (e.g. Product → Audience → Pain Point → Trend → Historical Content → Performance → Competitor Gap → Strategic Opportunity), then synthesize.\n\n# RELEVANCE GRADING\nEvaluate every retrieved item on relevance, authority, freshness, business_fit, performance_relevance. Reject low-value retrievals. Do not pass irrelevant documents to the final reasoning.\n\n# EVIDENCE SUFFICIENCY\nDetermine evidence_sufficient, confidence, missing_information. If evidence is insufficient, DO NOT GUESS — retrieve more. If it remains unavailable, explicitly report uncertainty.\n\n# CONFLICT RESOLUTION\nIf sources disagree: identify the conflict, compare authority, freshness, methodology, determine whether it can be resolved; if unresolved, preserve both viewpoints. Never silently select a convenient source.\n\n# TEMPORAL AWARENESS\nTime-sensitive questions: recent > historical. Evergreen brand info: official brand knowledge > temporary external signals. Never let a temporary trend overwrite permanent brand knowledge.\n\n# SOURCE PRIORITY\nPrefer: first-party > official documentation > direct platform data > high-authority research > reliable industry sources > secondary sources > community discussions. Community signals help discover trends but are not automatically factual evidence.\n\n# PERFORMANCE-AWARE RETRIEVAL\nWhen historical campaign data exists, retrieve content together with its performance. Never retrieve a previous post without checking its outcome. Prefer: content + context + audience + platform + metrics + result.\n\n# MEMORY WRITING\nDo not store every document. Store only knowledge that is reliable, relevant, reusable, and supported by evidence. For learned marketing patterns require sufficient evidence.\n\n# MEMORY TYPES\nWORKING (current task state), EPISODIC (specific campaigns/events), SEMANTIC (general marketing knowledge), PERFORMANCE (content-performance relationships), BRAND (persistent brand rules).\n\n# MEMORY CONFLICT POLICY\nNever overwrite permanent brand rules with temporary performance observations. If new info conflicts with existing knowledge, create a new observation and mark the conflict. Require sufficient evidence before updating generalized knowledge.\n\n# NON-NEGOTIABLE RULES\n1. Never hallucinate retrieval results. 2. Never invent sources. 3. Never fabricate trend data. 4. Never treat similarity as truth. 5. Never stop after one weak retrieval. 6. Never hide uncertainty. 7. Never overwrite persistent knowledge without evidence. 8. Never mix temporary trends with permanent brand rules. 9. Always preserve provenance. 10. Always return confidence. 11. Prefer evidence over assumptions. 12. Retrieve strategically, not excessively.\nObjective: Retrieve the minimum sufficient high-quality knowledge required for the agent to make the best possible marketing decision.\n\n# OUTPUT\nPopulate the structured output exactly:\n- retrieval_plan: your plan (task, knowledge_required, sources_required, time_sensitivity, freshness_requirement, confidence_requirement).\n- knowledge_found: synthesized findings.\n- evidence: cited evidence with provenance.\n- confidence: 0.0–1.0.\n- missing_information: array of gaps.\n- conflicts: array of unresolved/marked conflicts (empty if none).\n- recommendation: the knowledge/decision returned to the Marketing Agent.\n- social_caption: a ready-to-post marketing caption for social media, grounded in the recommendation, on-brand, with relevant hashtags. Same language as the brand knowledge.\n- image_prompt: a detailed English prompt to generate a marketing image that matches the caption and brand.\n- video_prompt: a detailed English prompt to generate a short marketing video (8s) that matches the caption and brand.\n- memory_update: \"STORE\" or \"DO NOT STORE\".\n- memory_record: when storing, a structured record { knowledge_type, insight, evidence_count, confidence, scope, source_campaigns, created_at }; otherwise null.\n\nThe social_caption / image_prompt / video_prompt drive downstream content generation and publishing, so always produce them.",
+          "maxIterations": 25
+        }
+      },
+      "id": "638f4f6c-3d58-42a8-99ed-adf562bb17b6",
+      "name": "AGENTIC-RAG-Ω",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        560,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "model": "anthropic/claude-sonnet-4.6",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "d91f2465-b0be-4e4a-b272-d800462ebaa3",
+      "name": "Reasoning Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        64,
+        432
+      ],
+      "credentials": {
+        "openRouterApi": {
+          "id": "MJ11WArBmCNVLs2s",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Semantic search over brand, product, audience, market, trend, competitor, historical content and external research knowledge documents. Use for evergreen/brand knowledge.",
+        "tableName": "marketing_knowledge",
+        "topK": 6,
+        "options": {}
+      },
+      "id": "c7926228-51a5-47e0-a4b1-0357152e581e",
+      "name": "search_knowledge_base",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        432
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "immcj8uqoILmc7zF",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d71c16f1-63fd-49cb-939f-ccc69c66f652",
+      "name": "KB Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        608
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "r1FjKsECEexRy1EF",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Semantic search over the engine's own persistent memory: learned performance patterns, persistent brand rules, and episodic campaign notes. Check before concluding and before writing new memory.",
+        "tableName": "marketing_memory",
+        "topK": 6,
+        "options": {}
+      },
+      "id": "112da94c-30cf-4e2f-a5d3-0bae1b23883a",
+      "name": "search_memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        384,
+        560
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "immcj8uqoILmc7zF",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "06fdba1c-a50f-47e7-b38e-c250b5510420",
+      "name": "Memory Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        752
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "r1FjKsECEexRy1EF",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "RKmQqgbCqOKrQp3q",
+          "cachedResultName": "marketing campaign history"
+        }
+      },
+      "id": "8fb0a749-e292-4a4f-a395-7fbcace140aa",
+      "name": "get_campaign_history",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        704,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('sql_query', 'A read-only SQL SELECT query for the marketing Postgres database') }}",
+        "options": {}
+      },
+      "id": "37d4a2fb-e36b-4521-9270-32532e4b8959",
+      "name": "query_database",
+      "type": "n8n-nodes-base.postgresTool",
+      "typeVersion": 2.7,
+      "position": [
+        832,
+        512
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "immcj8uqoILmc7zF",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "0b671187-b54e-45f7-9722-9016496645fc",
+      "name": "web_search",
+      "type": "@n8n/n8n-nodes-langchain.toolSerpApi",
+      "typeVersion": 1,
+      "position": [
+        944,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\"type\":\"object\",\"properties\":{\"retrieval_plan\":{\"type\":\"string\"},\"knowledge_found\":{\"type\":\"string\"},\"evidence\":{\"type\":\"string\"},\"confidence\":{\"type\":\"number\"},\"missing_information\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"conflicts\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"recommendation\":{\"type\":\"string\"},\"social_caption\":{\"type\":\"string\"},\"image_prompt\":{\"type\":\"string\"},\"video_prompt\":{\"type\":\"string\"},\"memory_update\":{\"type\":\"string\",\"enum\":[\"STORE\",\"DO NOT STORE\"]},\"memory_record\":{\"type\":[\"object\",\"null\"],\"properties\":{\"knowledge_type\":{\"type\":\"string\"},\"insight\":{\"type\":\"string\"},\"evidence_count\":{\"type\":\"number\"},\"confidence\":{\"type\":\"number\"},\"scope\":{\"type\":\"string\"},\"source_campaigns\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"created_at\":{\"type\":\"string\"}}}},\"required\":[\"retrieval_plan\",\"knowledge_found\",\"evidence\",\"confidence\",\"missing_information\",\"conflicts\",\"recommendation\",\"social_caption\",\"image_prompt\",\"video_prompt\",\"memory_update\"]}"
+      },
+      "id": "cfc5585c-2532-4f74-a649-61188be02491",
+      "name": "Structured Output",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1056,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "store",
+              "leftValue": "={{ $json.output.memory_update }}",
+              "rightValue": "STORE",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "718c5e73-5118-4d44-a76f-dca27a5bb9cf",
+      "name": "Store Memory?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": "marketing_memory",
+        "options": {}
+      },
+      "id": "349e64f4-e81e-4151-9ef6-0f697222fce0",
+      "name": "Write to Memory",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        1456,
+        16
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "immcj8uqoILmc7zF",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "efbd636f-61d1-4541-bd88-5395f4347380",
+      "name": "Write Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        432
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "r1FjKsECEexRy1EF",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ JSON.stringify($json.output.memory_record) }}",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "knowledge_type",
+                "value": "={{ $json.output.memory_record.knowledge_type }}"
+              },
+              {
+                "name": "scope",
+                "value": "={{ $json.output.memory_record.scope }}"
+              },
+              {
+                "name": "confidence",
+                "value": "={{ $json.output.memory_record.confidence }}"
+              },
+              {
+                "name": "created_at",
+                "value": "={{ $json.output.memory_record.created_at }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ef7618b6-aef4-418a-9b93-b26f8fd2fb85",
+      "name": "Memory Record",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "<__PLACEHOLDER_VALUE__Telegram chat ID for review/approval__>",
+        "message": "=Marketing content ready for review (confidence {{ $json.output.confidence }}):\n\nCAPTION:\n{{ $json.output.social_caption }}\n\nIMAGE PROMPT:\n{{ $json.output.image_prompt }}\n\nVIDEO PROMPT:\n{{ $json.output.video_prompt }}\n\nRECOMMENDATION:\n{{ $json.output.recommendation }}\n\nApprove to generate media and publish to LinkedIn, Facebook and X.",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "id": "8d81a93e-6f01-4014-86b2-bd2d757ca10b",
+      "name": "Review & Approve",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        352
+      ],
+      "webhookId": "f6e7ba5b-3f15-4d25-972c-837a6f42724b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "approved",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "57ca345b-7dd1-45cb-a80d-43e91247f4c1",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1488,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3.1-flash-image-preview",
+          "cachedResultName": "Nano Banana (Gemini image)"
+        },
+        "prompt": "={{ $('AGENTIC-RAG-Ω').item.json.output.image_prompt }}",
+        "options": {
+          "binaryPropertyOutput": "data"
+        }
+      },
+      "id": "adc53fd0-e7b5-4603-98ae-f1b45ddc7bb7",
+      "name": "Generate Image",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1776,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "postAs": "organization",
+        "organization": "<__PLACEHOLDER_VALUE__LinkedIn organization URN (e.g. urn:li:organization:12345)__>",
+        "text": "={{ $('AGENTIC-RAG-Ω').item.json.output.social_caption }}",
+        "shareMediaCategory": "IMAGE",
+        "additionalFields": {}
+      },
+      "id": "292ef110-4bbe-4689-8597-f7fb9e1821cf",
+      "name": "Post to LinkedIn",
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "httpRequestMethod": "POST",
+        "graphApiVersion": "v21.0",
+        "node": "<__PLACEHOLDER_VALUE__Facebook Page ID__>",
+        "edge": "photos",
+        "sendBinaryData": true,
+        "binaryPropertyName": "data",
+        "options": {
+          "queryParameters": {
+            "parameter": [
+              {
+                "name": "caption",
+                "value": "={{ $('AGENTIC-RAG-Ω').item.json.output.social_caption }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "1619f8d3-89ea-4984-89cf-94bead8d601b",
+      "name": "Post to Facebook",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $('AGENTIC-RAG-Ω').item.json.output.social_caption }}",
+        "additionalFields": {}
+      },
+      "id": "1563b352-15d1-4576-ac53-4c6c977420f7",
+      "name": "Post to X",
+      "type": "n8n-nodes-base.twitter",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "<__PLACEHOLDER_VALUE__Telegram chat ID for review/approval__>",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "=For manual Instagram/TikTok post:\n\n{{ $('AGENTIC-RAG-Ω').item.json.output.social_caption }}"
+        }
+      },
+      "id": "74ed28cc-a0f4-4ba0-8a15-5d7a84636fba",
+      "name": "Deliver Image (IG/TikTok)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        448
+      ],
+      "webhookId": "dcde1030-2884-40c7-ac18-0ccf44bd32d1"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "Select Veo video model"
+        },
+        "prompt": "={{ $('AGENTIC-RAG-Ω').item.json.output.video_prompt }}",
+        "options": {
+          "durationSeconds": 8,
+          "aspectRatio": "9:16",
+          "binaryPropertyOutput": "data"
+        }
+      },
+      "id": "f112ff23-e333-4c3e-a66f-2eef4c4cd07d",
+      "name": "Generate Video",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        1776,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendVideo",
+        "chatId": "<__PLACEHOLDER_VALUE__Telegram chat ID for review/approval__>",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "=Generated marketing video (for manual posting):\n\n{{ $('AGENTIC-RAG-Ω').item.json.output.social_caption }}"
+        }
+      },
+      "id": "cc193d45-a9da-414e-be47-d52c59b966f8",
+      "name": "Deliver Video",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        640
+      ],
+      "webhookId": "3d638ffe-0fbe-41df-b4fa-e8b0b32944fa"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AGENTIC-RAG-Ω": {
+      "main": [
+        [
+          {
+            "node": "Store Memory?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Review & Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reasoning Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_knowledge_base": {
+      "ai_tool": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "search_knowledge_base",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_memory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "search_memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_campaign_history": {
+      "ai_tool": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query_database": {
+      "ai_tool": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "web_search": {
+      "ai_tool": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AGENTIC-RAG-Ω",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Memory?": {
+      "main": [
+        [
+          {
+            "node": "Write to Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Write to Memory",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memory Record": {
+      "ai_document": [
+        [
+          {
+            "node": "Write to Memory",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review & Approve": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Generate Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image": {
+      "main": [
+        [
+          {
+            "node": "Post to LinkedIn",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to Facebook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to X",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Deliver Image (IG/TikTok)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Video": {
+      "main": [
+        [
+          {
+            "node": "Deliver Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ae117eef-dcbb-4ce2-a7c1-30beb10e4022",
+  "meta": {
+    "instanceId": "373d52ca1464033f36ed919f8c18e5a8c805453a4dc8d117c37081f268432f3a"
+  },
+  "nodeGroups": [],
+  "id": "1Ngadr8EejbO1WSG",
+  "tags": []
+}

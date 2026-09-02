@@ -1,0 +1,233 @@
+{
+  "name": "🤖 Flowise AI Agent + n8n Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flowise-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "flowise-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// تجهيز بيانات الدخول لـ Flowise\nconst body = $input.first().json.body || {};\nconst question = body.message || body.text || body.question || 'Hello';\nconst sessionId = body.sessionId || body.userId || body.chatId || Date.now().toString();\nconst overrideConfig = body.overrideConfig || {};\n\nreturn [{\n  json: {\n    question,\n    sessionId,\n    overrideConfig,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "prepare-flowise-input",
+      "name": "Prepare Flowise Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://your-flowise-instance.com/api/v1/prediction/' + $env.FLOWISE_CHATFLOW_ID }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.flowiseApiKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ question: $json.question, sessionId: $json.sessionId, overrideConfig: $json.overrideConfig }) }}",
+        "options": {
+          "timeout": 120000,
+          "retry": {
+            "limit": 3,
+            "statusCodes": "429,500,502,503,504",
+            "errorCodes": "ECONNRESET,ETIMEDOUT,ENOTFOUND"
+          }
+        }
+      },
+      "id": "flowise-api",
+      "name": "Flowise API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// معالجة رد Flowise\nconst response = $input.first().json;\n\n// Flowise يرجع { text: \"...\", sourceDocuments: [...], sessionId: \"...\" }\nconst aiResponse = response.text || response.answer || response.message || response.content || 'No response';\nconst sourceDocs = response.sourceDocuments || [];\nconst sessionId = response.sessionId || $input.first().json.sessionId;\n\nreturn [{\n  json: {\n    aiResponse,\n    sourceDocuments: sourceDocs.slice(0, 3), // أول 3 مصادر فقط\n    sessionId,\n    model: response.model || 'flowise-default',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parse-flowise-response",
+      "name": "Parse Flowise Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, response: $json.aiResponse, sources: $json.sourceDocuments, sessionId: $json.sessionId, timestamp: $json.timestamp }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Session-ID",
+                "value": "={{ $json.sessionId }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// معالجة الأخطاء\nconst error = $input.first().json;\nreturn [{\n  json: {\n    success: false,\n    error: error.message || error.description || 'Flowise API Error',\n    code: error.code || 'FLOWISE_ERROR',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        850,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Flowise Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Flowise Input": {
+      "main": [
+        [
+          {
+            "node": "Flowise API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flowise API": {
+      "main": [
+        [
+          {
+            "node": "Parse Flowise Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Flowise Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "AI",
+      "color": "#ff6d5a"
+    },
+    {
+      "name": "Flowise",
+      "color": "#4bb4f5"
+    },
+    {
+      "name": "Agent",
+      "color": "#7e79b6"
+    }
+  ]
+}

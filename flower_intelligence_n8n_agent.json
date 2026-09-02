@@ -1,0 +1,152 @@
+{
+  "name": "Flower Intelligence AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flower-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "flower-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// استخراج رسالة المستخدم من Webhook\nconst userMessage = $input.first().json.body?.message || $input.first().json.body?.text || 'Hello';\nreturn [{\n  json: {\n    userMessage: userMessage,\n    sessionId: $input.first().json.body?.sessionId || Date.now().toString()\n  }\n}];"
+      },
+      "id": "extract-message",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.flower.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.flowerApiKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"llama-3.1-8b\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful AI assistant powered by Flower Intelligence.\"},\n    {\"role\": \"user\", \"content\": \"{{$json.userMessage}}\"}\n  ],\n  \"temperature\": 0.7,\n  \"max_tokens\": 2048\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "flower-api",
+      "name": "Flower Intelligence API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// معالجة رد Flower Intelligence\nconst response = $input.first().json;\nconst aiResponse = response.choices?.[0]?.message?.content || response.message?.content || 'No response';\nreturn [{\n  json: {\n    response: aiResponse,\n    model: response.model || 'unknown',\n    usage: response.usage || {}\n  }\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"response\": \"{{$json.response}}\",\n  \"model\": \"{{$json.model}}\"\n}",
+        "options": {}
+      },
+      "id": "respond-to-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message": {
+      "main": [
+        [
+          {
+            "node": "Flower Intelligence API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flower Intelligence API": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    "AI",
+    "Flower Intelligence",
+    "Agent"
+  ]
+}

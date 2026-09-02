@@ -1,0 +1,424 @@
+{
+  "name": "🧠 AGENTIC-RAG-Ω — Marketing Knowledge Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "marketing-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "marketing-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════\n// PHASE 1: RETRIEVAL PLANNING\n// ═══════════════════════════════════════\nconst body = $input.first().json.body || {};\n\nconst task = body.task || body.query || body.question || '';\nconst brand = body.brand || '';\nconst product = body.product || '';\nconst audience = body.audience || '';\nconst platform = body.platform || '';\nconst timeSensitivity = body.timeSensitivity || 'medium';\nconst confidenceRequirement = body.confidenceRequirement || 0.75;\n\n// تحديد المجالات المعرفية المطلوبة\nconst knowledgeRequired = [];\nif (task.toLowerCase().includes('campaign') || task.toLowerCase().includes('حملة')) {\n  knowledgeRequired.push('Campaign History', 'Performance Analytics', 'Audience Knowledge');\n}\nif (task.toLowerCase().includes('content') || task.toLowerCase().includes('محتوى')) {\n  knowledgeRequired.push('Historical Content', 'Trend Intelligence', 'Brand Knowledge');\n}\nif (task.toLowerCase().includes('competitor') || task.toLowerCase().includes('منافس')) {\n  knowledgeRequired.push('Competitor Intelligence', 'Market Intelligence');\n}\nif (task.toLowerCase().includes('audience') || task.toLowerCase().includes('جمهور')) {\n  knowledgeRequired.push('Audience Knowledge', 'Product Knowledge');\n}\nif (knowledgeRequired.length === 0) {\n  knowledgeRequired.push('Brand Knowledge', 'Product Knowledge', 'Audience Knowledge', 'Trend Intelligence');\n}\n\n// تحديد المصادر\nconst sourcesRequired = [];\nif (brand) sourcesRequired.push('brand_knowledge');\nif (product) sourcesRequired.push('product_knowledge');\nif (audience) sourcesRequired.push('audience_segments');\nsourcesRequired.push('trend_intelligence', 'competitor_intelligence', 'campaign_history', 'performance_analytics');\n\nconst plan = {\n  task,\n  brand,\n  product,\n  audience,\n  platform,\n  knowledge_required: knowledgeRequired,\n  sources_required: sourcesRequired,\n  time_sensitivity: timeSensitivity,\n  freshness_requirement: timeSensitivity === 'high' ? 'last_7_days' : 'last_30_days',\n  confidence_requirement: confidenceRequirement,\n  session_id: body.sessionId || Date.now().toString(),\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: plan }];"
+      },
+      "id": "retrieval-plan",
+      "name": "1. Retrieval Planning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  id, knowledge_type, insight, evidence_count, confidence, scope, source_campaigns, created_at\nFROM marketing_memory \nWHERE knowledge_type = ANY(ARRAY[{{ $json.knowledge_required.map(k => \"'\" + k + \"'\").join(',') }}])\n  AND created_at >= NOW() - INTERVAL '30 days'\nORDER BY confidence DESC, created_at DESC\nLIMIT 20;"
+      },
+      "id": "retrieve-memory",
+      "name": "2a. Retrieve Memory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        650,
+        100
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MARKETING_API_URL || 'https://api.marketing-platform.com/v1' }}/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.marketingApiKey}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $json.task, knowledge_domains: $json.knowledge_required, brand: $json.brand, product: $json.product, audience: $json.audience, platform: $json.platform, freshness: $json.freshness_requirement }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "retrieve-external",
+      "name": "2b. Retrieve External",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  campaign_id, campaign_name, platform, content_type, \n  impressions, clicks, ctr, conversions, roas, \n  audience_segment, creative_angle, created_at\nFROM campaign_performance \nWHERE (brand = '{{ $json.brand }}' OR '{{ $json.brand }}' = '') \n  AND created_at >= NOW() - INTERVAL '90 days'\nORDER BY roas DESC, conversions DESC\nLIMIT 15;"
+      },
+      "id": "retrieve-performance",
+      "name": "2c. Retrieve Performance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        650,
+        500
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════\n// PHASE 3: FILTER + RERANK + GRADE\n// ═══════════════════════════════════════\nconst plan = $input.first().json;\n\n// جمع جميع النتائج من المصادر الثلاثة\nconst memoryResults = $items('Retrieve Memory').map(item => ({\n  source: 'memory',\n  type: item.json.knowledge_type || 'unknown',\n  content: item.json.insight || '',\n  confidence: item.json.confidence || 0.5,\n  authority: 0.9, // الذاكرة الداخلية ذات مصداقية عالية\n  freshness: item.json.created_at ? (new Date() - new Date(item.json.created_at)) / (1000 * 60 * 60 * 24) : 30,\n  business_fit: 0.8,\n  performance_relevance: item.json.source_campaigns ? 0.85 : 0.5\n}));\n\nconst externalResults = ($items('Retrieve External')[0]?.json?.results || []).map(r => ({\n  source: 'external',\n  type: r.type || 'external_research',\n  content: r.content || r.snippet || '',\n  confidence: r.confidence || 0.6,\n  authority: r.authority || 0.6,\n  freshness: r.freshness_days || 7,\n  business_fit: r.business_fit || 0.5,\n  performance_relevance: r.performance_relevance || 0.4\n}));\n\nconst performanceResults = $items('Retrieve Performance').map(item => ({\n  source: 'performance',\n  type: 'performance_analytics',\n  content: `Campaign: ${item.json.campaign_name} | Platform: ${item.json.platform} | CTR: ${item.json.ctr}% | ROAS: ${item.json.roas} | Creative: ${item.json.creative_angle}`,\n  confidence: item.json.roas > 3 ? 0.9 : item.json.roas > 1.5 ? 0.75 : 0.5,\n  authority: 0.95, // بيانات الأداء هي الأكثر مصداقية\n  freshness: item.json.created_at ? (new Date() - new Date(item.json.created_at)) / (1000 * 60 * 60 * 24) : 30,\n  business_fit: 0.9,\n  performance_relevance: 1.0\n}));\n\nconst allResults = [...memoryResults, ...externalResults, ...performanceResults];\n\n// حساب درجة المركبة لكل عنصر\nconst scored = allResults.map(item => {\n  const relevance = item.confidence;\n  const authority = item.authority;\n  const freshness = Math.max(0, 1 - (item.freshness / 30)); // تناسب عكسي مع العمر\n  const businessFit = item.business_fit;\n  const perfRel = item.performance_relevance;\n\n  const compositeScore = (\n    relevance * 0.30 +\n    authority * 0.25 +\n    freshness * 0.15 +\n    businessFit * 0.15 +\n    perfRel * 0.15\n  );\n\n  return { ...item, composite_score: parseFloat(compositeScore.toFixed(3)) };\n});\n\n// تصفية: رفض العناصر ذات الدرجة المنخفضة\nconst threshold = plan.confidence_requirement || 0.5;\nconst filtered = scored.filter(item => item.composite_score >= threshold);\n\n// إعادة الترتيب\nconst reranked = filtered.sort((a, b) => b.composite_score - a.composite_score).slice(0, 10);\n\n// تحديد ما إذا كانت الأدلة كافية\nconst evidenceSufficient = reranked.length >= 3 && reranked[0].composite_score >= 0.7;\nconst missingDomains = plan.knowledge_required.filter(k => \n  !reranked.some(r => r.type.toLowerCase().includes(k.toLowerCase()))\n);\n\nreturn [{\n  json: {\n    ...plan,\n    retrieved_items: reranked,\n    total_items: allResults.length,\n    filtered_items: reranked.length,\n    evidence_sufficient: evidenceSufficient,\n    confidence: reranked.length > 0 ? reranked[0].composite_score : 0,\n    missing_information: missingDomains,\n    conflicts: [],\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "filter-rerank-grade",
+      "name": "3. Filter / Rerank / Grade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════\n// PHASE 4: VERIFY + REASON + SYNTHESIZE\n// ═══════════════════════════════════════\nconst data = $input.first().json;\nconst items = data.retrieved_items || [];\n\n// التحقق من التعارضات\nconst conflicts = [];\nconst byType = {};\nitems.forEach(item => {\n  if (!byType[item.type]) byType[item.type] = [];\n  byType[item.type].push(item);\n});\n\nfor (const [type, typeItems] of Object.entries(byType)) {\n  if (typeItems.length >= 2) {\n    const contents = typeItems.map(t => t.content.toLowerCase());\n    // كشف تعارض بسيط: إذا كانت هناك كلمات متضادة\n    const positive = contents.some(c => c.includes('increase') || c.includes('grow') || c.includes('best'));\n    const negative = contents.some(c => c.includes('decrease') || c.includes('drop') || c.includes('worst'));\n    if (positive && negative) {\n      conflicts.push({\n        domain: type,\n        viewpoint_a: typeItems[0].content.substring(0, 200),\n        viewpoint_b: typeItems[1].content.substring(0, 200),\n        resolution: 'preserve_both'\n      });\n    }\n  }\n}\n\n// بناء سياق للتوليف\nconst context = items.map((item, i) => \n  `[${i+1}] Source: ${item.source} | Type: ${item.type} | Score: ${item.composite_score}\\n${item.content}`\n).join('\\n\\n');\n\nconst systemPrompt = `You are AGENTIC-RAG-Ω, a marketing intelligence engine.\nAnalyze the retrieved evidence and synthesize a strategic marketing recommendation.\n\nRULES:\n- Base your answer ONLY on the provided evidence.\n- If evidence is insufficient, say so explicitly.\n- If conflicts exist, present both viewpoints.\n- Cite sources by number [1], [2], etc.\n- Return confidence level (0.0-1.0).\n- Structure: Summary → Evidence → Recommendation → Confidence → Missing Info`;\n\nconst userPrompt = `TASK: ${data.task}\nBRAND: ${data.brand || 'N/A'}\nPRODUCT: ${data.product || 'N/A'}\nAUDIENCE: ${data.audience || 'N/A'}\nPLATFORM: ${data.platform || 'N/A'}\n\nEVIDENCE:\n${context}\n\nCONFLICTS: ${conflicts.length > 0 ? JSON.stringify(conflicts) : 'None detected'}\n\nMISSING DOMAINS: ${data.missing_information?.join(', ') || 'None'}\n\nSynthesize a marketing recommendation.`;\n\nreturn [{\n  json: {\n    ...data,\n    conflicts,\n    synthesis_input: { systemPrompt, userPrompt },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "verify-reason",
+      "name": "4. Verify + Reason",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "ai-synthesize",
+      "name": "5. AI Synthesize",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "={{ 'gpt-4o' }}",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 2048
+        }
+      },
+      "id": "openai-model",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        500
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ═══════════════════════════════════════\n// PHASE 6: STRUCTURE OUTPUT\n// ═══════════════════════════════════════\nconst aiResponse = $input.first().json;\nconst plan = $items('1. Retrieval Planning')[0].json;\nconst graded = $items('3. Filter / Rerank / Grade')[0].json;\n\nreturn [{\n  json: {\n    retrieval_plan: {\n      task: plan.task,\n      knowledge_required: plan.knowledge_required,\n      sources_required: plan.sources_required,\n      time_sensitivity: plan.time_sensitivity,\n      confidence_requirement: plan.confidence_requirement\n    },\n    knowledge_found: graded.retrieved_items.map(item => ({\n      source: item.source,\n      type: item.type,\n      content_preview: item.content.substring(0, 300),\n      composite_score: item.composite_score\n    })),\n    evidence: {\n      total_items: graded.total_items,\n      filtered_items: graded.filtered_items,\n      evidence_sufficient: graded.evidence_sufficient,\n      confidence: graded.confidence\n    },\n    confidence: graded.confidence,\n    missing_information: graded.missing_information,\n    conflicts: graded.conflicts,\n    recommendation: aiResponse.output || aiResponse.text || aiResponse.response || aiResponse,\n    memory_update: graded.evidence_sufficient && graded.confidence >= 0.75 ? 'STORE' : 'DO NOT STORE',\n    session_id: plan.session_id,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "structure-output",
+      "name": "6. Structure Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": {
+          "tableName": "marketing_memory",
+          "schema": "public"
+        },
+        "columns": {
+          "mapping": [
+            {
+              "column": "knowledge_type",
+              "value": "performance_pattern"
+            },
+            {
+              "column": "insight",
+              "value": "={{ $json.recommendation.substring(0, 500) }}"
+            },
+            {
+              "column": "evidence_count",
+              "value": "={{ $json.evidence.filtered_items }}"
+            },
+            {
+              "column": "confidence",
+              "value": "={{ $json.confidence }}"
+            },
+            {
+              "column": "scope",
+              "value": "={{ $json.retrieval_plan.task.substring(0, 100) }}"
+            },
+            {
+              "column": "source_campaigns",
+              "value": "={{ JSON.stringify($json.knowledge_found.map(k => k.source)) }}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        }
+      },
+      "id": "write-memory",
+      "name": "7. Write Memory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "8. Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// معالجة الأخطاء\nconst error = $input.first().json;\nreturn [{\n  json: {\n    success: false,\n    error: error.message || 'AGENTIC-RAG-Ω Error',\n    phase: error.phase || 'unknown',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1150,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Retrieval Planning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Retrieval Planning": {
+      "main": [
+        [
+          {
+            "node": "2a. Retrieve Memory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "2b. Retrieve External",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "2c. Retrieve Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2a. Retrieve Memory": {
+      "main": [
+        [
+          {
+            "node": "3. Filter / Rerank / Grade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b. Retrieve External": {
+      "main": [
+        [
+          {
+            "node": "3. Filter / Rerank / Grade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c. Retrieve Performance": {
+      "main": [
+        [
+          {
+            "node": "3. Filter / Rerank / Grade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Filter / Rerank / Grade": {
+      "main": [
+        [
+          {
+            "node": "4. Verify + Reason",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Verify + Reason": {
+      "main": [
+        [
+          {
+            "node": "5. AI Synthesize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. AI Synthesize": {
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6. Structure Output": {
+      "main": [
+        [
+          {
+            "node": "8. Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7. Write Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Write Memory": {
+      "main": [
+        []
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "AGENTIC-RAG",
+      "color": "#ff6d5a"
+    },
+    {
+      "name": "Marketing",
+      "color": "#4bb4f5"
+    },
+    {
+      "name": "AI-Agent",
+      "color": "#7e79b6"
+    }
+  ]
+}

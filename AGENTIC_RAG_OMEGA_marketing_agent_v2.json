@@ -1,0 +1,761 @@
+{
+  "name": "🧠 AGENTIC-RAG-Ω — Marketing Agent (Design + Publish)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "marketing-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "marketing-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst task = body.task || body.query || '';\nconst brand = body.brand || '';\nconst product = body.product || '';\nconst audience = body.audience || '';\nconst platform = body.platform || 'instagram';\nconst contentType = body.contentType || 'auto';\nconst tone = body.tone || 'professional';\nconst publish = body.publish !== false;\n\nconst knowledgeRequired = [];\nif (task.toLowerCase().includes('campaign') || task.toLowerCase().includes('حملة')) {\n  knowledgeRequired.push('Campaign History', 'Performance Analytics', 'Audience Knowledge');\n}\nif (task.toLowerCase().includes('content') || task.toLowerCase().includes('محتوى')) {\n  knowledgeRequired.push('Historical Content', 'Trend Intelligence', 'Brand Knowledge');\n}\nif (knowledgeRequired.length === 0) {\n  knowledgeRequired.push('Brand Knowledge', 'Product Knowledge', 'Audience Knowledge', 'Trend Intelligence');\n}\n\nreturn [{ json: {\n  task, brand, product, audience, platform, contentType, tone, publish,\n  knowledge_required: knowledgeRequired,\n  confidence_requirement: body.confidenceRequirement || 0.75,\n  session_id: body.sessionId || 'sess-' + Date.now(),\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "retrieval-plan",
+      "name": "1-Retrieval-Planning",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, knowledge_type, insight, evidence_count, confidence, scope, source_campaigns, created_at\nFROM marketing_memory \nWHERE knowledge_type = ANY(ARRAY[{{ $json.knowledge_required.map(k => \"'\" + k + \"'\").join(',') }}])\n  AND created_at >= NOW() - INTERVAL '30 days'\nORDER BY confidence DESC, created_at DESC\nLIMIT 20;"
+      },
+      "id": "retrieve-memory",
+      "name": "2a-Retrieve-Memory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        750,
+        100
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT campaign_id, campaign_name, platform, content_type, impressions, clicks, ctr, conversions, roas, audience_segment, creative_angle, created_at\nFROM campaign_performance \nWHERE (brand = '{{ $json.brand }}' OR '{{ $json.brand }}' = '') \n  AND created_at >= NOW() - INTERVAL '90 days'\nORDER BY roas DESC, conversions DESC\nLIMIT 15;"
+      },
+      "id": "retrieve-performance",
+      "name": "2b-Retrieve-Performance",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        750,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT brand_name, knowledge_type, content, priority\nFROM brand_knowledge \nWHERE brand_name = '{{ $json.brand }}' OR '{{ $json.brand }}' = ''\nORDER BY priority ASC, created_at DESC;"
+      },
+      "id": "retrieve-brand",
+      "name": "2c-Retrieve-Brand-Rules",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        750,
+        500
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const plan = $input.first().json;\n\nconst memoryItems = $items('2a-Retrieve-Memory').map(item => ({\n  source: 'memory', type: item.json.knowledge_type || 'unknown',\n  content: item.json.insight || '', confidence: item.json.confidence || 0.5,\n  authority: 0.9, freshness: item.json.created_at ? (new Date() - new Date(item.json.created_at)) / (1000*60*60*24) : 30,\n  business_fit: 0.8, performance_relevance: item.json.source_campaigns ? 0.85 : 0.5\n}));\n\nconst perfItems = $items('2b-Retrieve-Performance').map(item => ({\n  source: 'performance', type: 'performance_analytics',\n  content: `Campaign: ${item.json.campaign_name} | Platform: ${item.json.platform} | CTR: ${item.json.ctr}% | ROAS: ${item.json.roas} | Creative: ${item.json.creative_angle}`,\n  confidence: item.json.roas > 3 ? 0.9 : item.json.roas > 1.5 ? 0.75 : 0.5,\n  authority: 0.95, freshness: item.json.created_at ? (new Date() - new Date(item.json.created_at)) / (1000*60*60*24) : 30,\n  business_fit: 0.9, performance_relevance: 1.0\n}));\n\nconst brandItems = $items('2c-Retrieve-Brand-Rules').map(item => ({\n  source: 'brand', type: 'brand_knowledge',\n  content: `${item.json.knowledge_type}: ${item.json.content}`,\n  confidence: item.json.priority === 1 ? 0.95 : 0.7,\n  authority: 1.0, freshness: 0, business_fit: 1.0, performance_relevance: 0.3\n}));\n\nconst all = [...memoryItems, ...perfItems, ...brandItems];\n\nconst scored = all.map(item => {\n  const composite = item.confidence*0.30 + item.authority*0.25 + Math.max(0, 1-item.freshness/30)*0.15 + item.business_fit*0.15 + item.performance_relevance*0.15;\n  return { ...item, composite_score: parseFloat(composite.toFixed(3)) };\n});\n\nconst threshold = plan.confidence_requirement || 0.5;\nconst reranked = scored.filter(i => i.composite_score >= threshold).sort((a,b) => b.composite_score - a.composite_score).slice(0, 10);\n\nreturn [{ json: {\n  ...plan,\n  retrieved_items: reranked,\n  evidence_sufficient: reranked.length >= 3 && reranked[0].composite_score >= 0.7,\n  confidence: reranked.length > 0 ? reranked[0].composite_score : 0,\n  missing_information: plan.knowledge_required.filter(k => !reranked.some(r => r.type.toLowerCase().includes(k.toLowerCase())))\n}}];"
+      },
+      "id": "filter-rerank",
+      "name": "3-Filter-Rerank-Grade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst items = data.retrieved_items || [];\nconst context = items.map((item, i) => `[${i+1}] ${item.source.toUpperCase()} | ${item.type} | Score: ${item.composite_score}\n${item.content}`).join('\n\n');\n\nreturn [{ json: {\n  ...data,\n  system_prompt: `You are AGENTIC-RAG-Ω marketing engine. Create a content brief based ONLY on evidence.\n\nOUTPUT JSON:\n{\n  \"content_strategy\": \"brief strategy\",\n  \"visual_concept\": \"detailed visual direction\",\n  \"caption\": \"engaging caption in user's language\",\n  \"hashtags\": [\"tag1\",\"tag2\",\"tag3\",\"tag4\",\"tag5\"],\n  \"cta\": \"call to action\",\n  \"image_prompt\": \"detailed DALL-E prompt\",\n  \"video_prompt\": \"video generation prompt\",\n  \"tone_check\": \"brand alignment\",\n  \"confidence\": 0.0\n}`,\n  user_prompt: `TASK: ${data.task}\nBRAND: ${data.brand || 'N/A'}\nPRODUCT: ${data.product || 'N/A'}\nAUDIENCE: ${data.audience || 'N/A'}\nPLATFORM: ${data.platform}\nCONTENT TYPE: ${data.contentType}\nTONE: ${data.tone}\n\nEVIDENCE:\n${context}\n\nGenerate content brief.`,\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "prepare-synthesis",
+      "name": "4-Prepare-Synthesis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 2500,
+          "responseFormat": {
+            "type": "json_object"
+          }
+        }
+      },
+      "id": "openai-model",
+      "name": "5-OpenAI-Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1250,
+        550
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {},
+        "optionsType": "ai_agent"
+      },
+      "id": "agent-synthesize",
+      "name": "5-Agent-Synthesize",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $input.first().json;\nlet brief = {};\ntry {\n  brief = typeof ai.output === 'string' ? JSON.parse(ai.output) : ai.output || ai;\n} catch(e) {\n  brief = { content_strategy: ai.output || ai.text || '', visual_concept: '', caption: '', hashtags: [], cta: '', image_prompt: '', video_prompt: '', tone_check: '', confidence: 0.5 };\n}\nreturn [{ json: { ...$items('4-Prepare-Synthesis')[0].json, content_brief: brief } }];"
+      },
+      "id": "parse-brief",
+      "name": "6-Parse-Content-Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "generate",
+        "prompt": "={{ $json.content_brief.image_prompt || 'A professional marketing image' }}",
+        "model": "dall-e-3",
+        "size": "1024x1024",
+        "quality": "standard",
+        "responseFormat": "url"
+      },
+      "id": "generate-image",
+      "name": "7a-Generate-Image-DALL-E",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2000,
+        100
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: { ...data, video_generation_prompt: data.content_brief.video_prompt || data.content_brief.image_prompt || '', video_status: 'pending_external_api' } }];"
+      },
+      "id": "prepare-video",
+      "name": "7b-Prepare-Video-Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst platform = data.platform?.toLowerCase() || 'instagram';\nreturn [{ json: { ...data, target_platform: platform, should_publish: data.publish !== false } }];"
+      },
+      "id": "route-publisher",
+      "name": "8-Route-Publisher",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.facebook.com/v18.0/' + $env.INSTAGRAM_BUSINESS_ACCOUNT_ID + '/media' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.metaAccessToken}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ image_url: $json.image_url || $json.generated_image_url, caption: $json.content_brief.caption + '\\n\\n' + ($json.content_brief.hashtags || []).join(' '), access_token: $credentials.metaAccessToken }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "publish-instagram",
+      "name": "9a-Publish-Instagram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2500,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.facebook.com/v18.0/' + $env.FACEBOOK_PAGE_ID + '/photos' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.metaAccessToken}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.image_url || $json.generated_image_url, message: $json.content_brief.caption + '\\n\\n' + ($json.content_brief.hashtags || []).join(' '), access_token: $credentials.metaAccessToken }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "publish-facebook",
+      "name": "9b-Publish-Facebook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2500,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.linkedinAccessToken}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ author: 'urn:li:person:' + $env.LINKEDIN_PERSON_URN, lifecycleState: 'PUBLISHED', specificContent: { 'com.linkedin.ugc.ShareContent': { shareCommentary: { text: $json.content_brief.caption + '\\n\\n' + ($json.content_brief.hashtags || []).join(' ') }, shareMediaCategory: 'IMAGE', media: [{ status: 'READY', originalUrl: $json.image_url || $json.generated_image_url }] } }, visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "publish-linkedin",
+      "name": "9c-Publish-LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twitter.com/2/tweets",
+        "authentication": "oAuth2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: ($json.content_brief.caption || '').substring(0, 240) + '\\n\\n' + ($json.content_brief.hashtags || []).slice(0,3).join(' ') }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "publish-twitter",
+      "name": "9d-Publish-X-Twitter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2500,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn [{ json: { ...data, tiktok_publish_status: 'requires_manual_upload', tiktok_video_prompt: data.video_generation_prompt || '' } }];"
+      },
+      "id": "publish-tiktok",
+      "name": "9e-Publish-TikTok-Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": {
+          "tableName": "marketing_memory",
+          "schema": "public"
+        },
+        "columns": {
+          "mapping": [
+            {
+              "column": "knowledge_type",
+              "value": "content_creation"
+            },
+            {
+              "column": "insight",
+              "value": "={{ 'Generated ' + $json.platform + ' content: ' + ($json.content_brief.content_strategy || '').substring(0, 200) }}"
+            },
+            {
+              "column": "evidence_count",
+              "value": "1"
+            },
+            {
+              "column": "confidence",
+              "value": "={{ $json.content_brief.confidence || 0.8 }}"
+            },
+            {
+              "column": "scope",
+              "value": "={{ $json.platform + '_' + $json.contentType }}"
+            },
+            {
+              "column": "source_campaigns",
+              "value": "[]"
+            },
+            {
+              "column": "created_at",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "save-memory",
+      "name": "10-Save-to-Memory",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        2750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst brief = data.content_brief || {};\nreturn [{ json: {\n  success: true,\n  session_id: data.session_id,\n  retrieval_plan: { task: data.task, knowledge_required: data.knowledge_required, confidence_requirement: data.confidence_requirement },\n  content_brief: {\n    strategy: brief.content_strategy,\n    visual_concept: brief.visual_concept,\n    caption: brief.caption,\n    hashtags: brief.hashtags,\n    cta: brief.cta,\n    tone_check: brief.tone_check\n  },\n  generated_assets: {\n    image_url: data.image_url || data.generated_image_url || null,\n    video_prompt: data.video_generation_prompt || null,\n    video_status: data.video_status || 'not_requested'\n  },\n  publish_status: {\n    platform: data.platform,\n    published: data.should_publish,\n    post_id: data.publish_result?.id || null,\n    tiktok_draft: data.tiktok_publish_status || null\n  },\n  confidence: brief.confidence || data.confidence || 0.8,\n  timestamp: new Date().toISOString()\n}}];"
+      },
+      "id": "structure-final",
+      "name": "11-Structure-Final-Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": {}
+      },
+      "id": "respond-webhook",
+      "name": "12-Respond-to-Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json;\nreturn [{ json: { success: false, error: error.message || 'Agent Error', phase: error.phase || 'unknown', timestamp: new Date().toISOString() } }];"
+      },
+      "id": "error-handler",
+      "name": "Error-Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "error-response",
+      "name": "Error-Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1750,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "1-Retrieval-Planning",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1-Retrieval-Planning": {
+      "main": [
+        [
+          {
+            "node": "2a-Retrieve-Memory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "2b-Retrieve-Performance",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "2c-Retrieve-Brand-Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2a-Retrieve-Memory": {
+      "main": [
+        [
+          {
+            "node": "3-Filter-Rerank-Grade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2b-Retrieve-Performance": {
+      "main": [
+        [
+          {
+            "node": "3-Filter-Rerank-Grade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2c-Retrieve-Brand-Rules": {
+      "main": [
+        [
+          {
+            "node": "3-Filter-Rerank-Grade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3-Filter-Rerank-Grade": {
+      "main": [
+        [
+          {
+            "node": "4-Prepare-Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4-Prepare-Synthesis": {
+      "main": [
+        [
+          {
+            "node": "5-Agent-Synthesize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5-Agent-Synthesize": {
+      "main": [
+        [
+          {
+            "node": "6-Parse-Content-Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error-Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "ai_languageModel": [
+        [
+          {
+            "node": "5-OpenAI-Model",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6-Parse-Content-Brief": {
+      "main": [
+        [
+          {
+            "node": "7a-Generate-Image-DALL-E",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "7b-Prepare-Video-Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7a-Generate-Image-DALL-E": {
+      "main": [
+        [
+          {
+            "node": "8-Route-Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7b-Prepare-Video-Prompt": {
+      "main": [
+        [
+          {
+            "node": "8-Route-Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8-Route-Publisher": {
+      "main": [
+        [
+          {
+            "node": "9a-Publish-Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9b-Publish-Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9c-Publish-LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9d-Publish-X-Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "9e-Publish-TikTok-Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9a-Publish-Instagram": {
+      "main": [
+        [
+          {
+            "node": "10-Save-to-Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9b-Publish-Facebook": {
+      "main": [
+        [
+          {
+            "node": "10-Save-to-Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9c-Publish-LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "10-Save-to-Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9d-Publish-X-Twitter": {
+      "main": [
+        [
+          {
+            "node": "10-Save-to-Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9e-Publish-TikTok-Draft": {
+      "main": [
+        [
+          {
+            "node": "10-Save-to-Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10-Save-to-Memory": {
+      "main": [
+        [
+          {
+            "node": "11-Structure-Final-Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11-Structure-Final-Output": {
+      "main": [
+        [
+          {
+            "node": "12-Respond-to-Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error-Handler": {
+      "main": [
+        [
+          {
+            "node": "Error-Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "AGENTIC-RAG",
+      "color": "#ff6d5a"
+    },
+    {
+      "name": "Marketing",
+      "color": "#4bb4f5"
+    },
+    {
+      "name": "Content-Creation",
+      "color": "#7e79b6"
+    },
+    {
+      "name": "Social-Publish",
+      "color": "#2ecc71"
+    }
+  ]
+}

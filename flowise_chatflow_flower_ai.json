@@ -1,0 +1,312 @@
+{
+  "description": "🌸 Flower AI Agent — وكيل ذكي يتكامل مع Flower Intelligence API",
+  "name": "Flower AI Agent",
+  "nodes": [
+    {
+      "id": "conversationalAgent_0",
+      "position": {
+        "x": 450,
+        "y": 100
+      },
+      "type": "customNode",
+      "data": {
+        "id": "conversationalAgent_0",
+        "label": "Conversational Agent",
+        "version": 2,
+        "name": "conversationalAgent",
+        "type": "Agent",
+        "category": "Agents",
+        "description": "Agent that holds a conversation and calls tools",
+        "inputParams": [
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string",
+            "default": "You are Flower AI, a helpful assistant powered by Flower Intelligence.",
+            "rows": 4,
+            "optional": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number",
+            "default": 5,
+            "optional": true
+          }
+        ],
+        "inputs": {
+          "systemMessage": "You are Flower AI, a helpful assistant powered by Flower Intelligence. You answer questions accurately and concisely.",
+          "maxIterations": 5
+        },
+        "outputAnchors": [
+          {
+            "id": "conversationalAgent_0-output-conversationalAgent-AgentExecutor|BaseChain|Runnable",
+            "name": "conversationalAgent",
+            "label": "AgentExecutor",
+            "type": "AgentExecutor | BaseChain | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "chatOpenAICustom_0",
+      "position": {
+        "x": 850,
+        "y": 100
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatOpenAICustom_0",
+        "label": "ChatOpenAI Custom (Flower AI)",
+        "version": 2,
+        "name": "chatOpenAICustom",
+        "type": "ChatOpenAICustom",
+        "category": "Chat Models",
+        "description": "Chat completion using custom OpenAI-compatible endpoint",
+        "credentialNames": [
+          "openAIApi"
+        ],
+        "inputParams": [
+          {
+            "label": "Base Path",
+            "name": "basePath",
+            "type": "string",
+            "default": "https://api.flower.ai/v1",
+            "placeholder": "https://api.flower.ai/v1"
+          },
+          {
+            "label": "Model Name",
+            "name": "modelName",
+            "type": "string",
+            "default": "llama-3.1-8b",
+            "placeholder": "llama-3.1-8b"
+          },
+          {
+            "label": "Temperature",
+            "name": "temperature",
+            "type": "number",
+            "default": 0.7,
+            "step": 0.1
+          },
+          {
+            "label": "Max Tokens",
+            "name": "maxTokens",
+            "type": "number",
+            "optional": true,
+            "placeholder": "2048"
+          }
+        ],
+        "inputs": {
+          "basePath": "https://api.flower.ai/v1",
+          "modelName": "llama-3.1-8b",
+          "temperature": 0.7,
+          "maxTokens": 2048
+        },
+        "outputAnchors": [
+          {
+            "id": "chatOpenAICustom_0-output-chatOpenAICustom-ChatOpenAICustom|BaseChatModel|BaseLanguageModel|Runnable",
+            "name": "chatOpenAICustom",
+            "label": "ChatOpenAICustom",
+            "type": "ChatOpenAICustom | BaseChatModel | BaseLanguageModel | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "bufferMemory_0",
+      "position": {
+        "x": 850,
+        "y": 600
+      },
+      "type": "customNode",
+      "data": {
+        "id": "bufferMemory_0",
+        "label": "Buffer Memory",
+        "version": 2,
+        "name": "bufferMemory",
+        "type": "BufferMemory",
+        "category": "Memory",
+        "description": "Remembers previous conversational back and forths directly",
+        "inputParams": [
+          {
+            "label": "Memory Key",
+            "name": "memoryKey",
+            "type": "string",
+            "default": "chat_history"
+          },
+          {
+            "label": "Input Key",
+            "name": "inputKey",
+            "type": "string",
+            "default": "input"
+          }
+        ],
+        "inputs": {
+          "memoryKey": "chat_history",
+          "inputKey": "input"
+        },
+        "outputAnchors": [
+          {
+            "id": "bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory",
+            "name": "bufferMemory",
+            "label": "BufferMemory",
+            "type": "BufferMemory | BaseChatMemory | BaseMemory"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "chatPromptTemplate_0",
+      "position": {
+        "x": 850,
+        "y": -200
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatPromptTemplate_0",
+        "label": "Chat Prompt Template",
+        "version": 2,
+        "name": "chatPromptTemplate",
+        "type": "ChatPromptTemplate",
+        "category": "Prompts",
+        "description": "Schema to represent a chat prompt",
+        "inputParams": [
+          {
+            "label": "System Message",
+            "name": "systemMessagePrompt",
+            "type": "string",
+            "rows": 4,
+            "default": "You are Flower AI, a helpful assistant."
+          },
+          {
+            "label": "Human Message",
+            "name": "humanMessagePrompt",
+            "type": "string",
+            "rows": 4,
+            "default": "{input}"
+          }
+        ],
+        "inputs": {
+          "systemMessagePrompt": "You are Flower AI, a helpful assistant powered by Flower Intelligence. You answer questions accurately and concisely.",
+          "humanMessagePrompt": "{input}"
+        },
+        "outputAnchors": [
+          {
+            "id": "chatPromptTemplate_0-output-chatPromptTemplate-BaseChatPromptTemplate|BasePromptTemplate",
+            "name": "chatPromptTemplate",
+            "label": "BaseChatPromptTemplate",
+            "type": "BaseChatPromptTemplate | BasePromptTemplate"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    },
+    {
+      "id": "chatOllama_0",
+      "position": {
+        "x": 1250,
+        "y": 100
+      },
+      "type": "customNode",
+      "data": {
+        "id": "chatOllama_0",
+        "label": "Chat Ollama (Local)",
+        "version": 2,
+        "name": "chatOllama",
+        "type": "ChatOllama",
+        "category": "Chat Models",
+        "description": "Chat completion using Ollama on localhost",
+        "credentialNames": [
+          "ollamaApi"
+        ],
+        "inputParams": [
+          {
+            "label": "Base URL",
+            "name": "baseUrl",
+            "type": "string",
+            "default": "http://ollama:11434"
+          },
+          {
+            "label": "Model Name",
+            "name": "modelName",
+            "type": "string",
+            "default": "llama3.1"
+          },
+          {
+            "label": "Temperature",
+            "name": "temperature",
+            "type": "number",
+            "default": 0.7
+          }
+        ],
+        "inputs": {
+          "modelName": "llama3.1",
+          "baseUrl": "http://ollama:11434",
+          "temperature": 0.7
+        },
+        "outputAnchors": [
+          {
+            "id": "chatOllama_0-output-chatOllama-ChatOllama|BaseChatModel|BaseLanguageModel|Runnable",
+            "name": "chatOllama",
+            "label": "ChatOllama",
+            "type": "ChatOllama | BaseChatModel | BaseLanguageModel | Runnable"
+          }
+        ]
+      },
+      "width": 300,
+      "height": 424,
+      "selected": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "chatPromptTemplate_0",
+      "sourceHandle": "chatPromptTemplate_0-output-chatPromptTemplate-BaseChatPromptTemplate|BasePromptTemplate",
+      "target": "conversationalAgent_0",
+      "targetHandle": "conversationalAgent_0-input-prompt-BaseChatPromptTemplate",
+      "type": "buttonedge",
+      "id": "edge-prompt",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "bufferMemory_0",
+      "sourceHandle": "bufferMemory_0-output-bufferMemory-BufferMemory|BaseChatMemory|BaseMemory",
+      "target": "conversationalAgent_0",
+      "targetHandle": "conversationalAgent_0-input-memory-BaseChatMemory",
+      "type": "buttonedge",
+      "id": "edge-memory",
+      "data": {
+        "label": ""
+      }
+    },
+    {
+      "source": "chatOpenAICustom_0",
+      "sourceHandle": "chatOpenAICustom_0-output-chatOpenAICustom-ChatOpenAICustom|BaseChatModel|BaseLanguageModel|Runnable",
+      "target": "conversationalAgent_0",
+      "targetHandle": "conversationalAgent_0-input-model-BaseChatModel",
+      "type": "buttonedge",
+      "id": "edge-model",
+      "data": {
+        "label": ""
+      }
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+}

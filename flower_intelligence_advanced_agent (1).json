@@ -1,0 +1,361 @@
+{
+  "name": "🌸 Flower Intelligence AI Agent - Advanced",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flower-ai-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "flower-ai-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// تجهيز بيانات الدخول\nconst body = $input.first().json.body || {};\nconst userMessage = body.message || body.text || body.query || 'Hello';\nconst sessionId = body.sessionId || body.userId || Date.now().toString();\nconst history = body.history || [];\n\nreturn [{\n  json: {\n    userMessage,\n    sessionId,\n    history,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "prepare-input",
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "table": {
+          "tableName": "chat_history",
+          "schema": "public"
+        },
+        "returnAll": false,
+        "limit": 10,
+        "where": {
+          "conditions": [
+            {
+              "column": "session_id",
+              "value": "={{ $json.sessionId }}",
+              "condition": "equals"
+            }
+          ]
+        },
+        "sort": {
+          "properties": [
+            {
+              "column": "created_at",
+              "direction": "asc"
+            }
+          ]
+        }
+      },
+      "id": "get-history",
+      "name": "Get Chat History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        450,
+        500
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// بناء سياق المحادثة\nconst input = $input.first().json;\nconst history = input.history || [];\n\n// تحويل التاريخ إلى تنسيق Flower Intelligence\nconst messages = [\n  { role: 'system', content: 'You are Flower AI, a helpful and privacy-focused AI assistant powered by Flower Intelligence. You prioritize user privacy and process data locally when possible.' }\n];\n\n// إضافة التاريخ السابق\nfor (const msg of history) {\n  if (msg.role && msg.content) {\n    messages.push({ role: msg.role, content: msg.content });\n  }\n}\n\n// إضافة رسالة المستخدم الحالية\nmessages.push({ role: 'user', content: input.userMessage });\n\nreturn [{\n  json: {\n    ...input,\n    messages,\n    model: input.model || 'llama-3.1-8b'\n  }\n}];"
+      },
+      "id": "build-context",
+      "name": "Build Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.flower.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$credentials.flowerApiKey}}"
+            },
+            {
+              "name": "X-Session-ID",
+              "value": "={{ $json.sessionId }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, messages: $json.messages, temperature: 0.7, max_tokens: 2048, stream: false }) }}",
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "limit": 3,
+            "statusCodes": "429,500,502,503",
+            "errorCodes": "ECONNRESET,ETIMEDOUT"
+          }
+        }
+      },
+      "id": "flower-chat",
+      "name": "Flower Intelligence Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// معالجة الرد\nconst response = $input.first().json;\nlet aiResponse = '';\nlet model = 'unknown';\nlet usage = {};\n\nif (response.choices && response.choices[0]) {\n  aiResponse = response.choices[0].message?.content || '';\n  model = response.model || 'unknown';\n  usage = response.usage || {};\n} else if (response.message) {\n  aiResponse = response.message.content || '';\n  model = response.model || 'unknown';\n}\n\nreturn [{\n  json: {\n    aiResponse,\n    model,\n    usage,\n    sessionId: $input.first().json.sessionId,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parse-ai-response",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": {
+          "tableName": "chat_history",
+          "schema": "public"
+        },
+        "columns": {
+          "mapping": [
+            {
+              "column": "session_id",
+              "value": "={{ $json.sessionId }}"
+            },
+            {
+              "column": "role",
+              "value": "assistant"
+            },
+            {
+              "column": "content",
+              "value": "={{ $json.aiResponse }}"
+            },
+            {
+              "column": "model",
+              "value": "={{ $json.model }}"
+            },
+            {
+              "column": "created_at",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        }
+      },
+      "id": "save-response",
+      "name": "Save Response to DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, response: $json.aiResponse, model: $json.model, sessionId: $json.sessionId, timestamp: $json.timestamp }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Flower-Model",
+                "value": "={{ $json.model }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// معالجة الأخطاء\nconst error = $input.first().json;\nreturn [{\n  json: {\n    success: false,\n    error: error.message || 'Unknown error',\n    code: error.code || 'ERROR',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1050,
+        700
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Chat History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Chat History": {
+      "main": [
+        [
+          {
+            "node": "Build Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Context": {
+      "main": [
+        [
+          {
+            "node": "Flower Intelligence Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flower Intelligence Chat": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Save Response to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "timezone": "UTC"
+  },
+  "tags": [
+    {
+      "name": "AI",
+      "color": "#ff6d5a"
+    },
+    {
+      "name": "Flower Intelligence",
+      "color": "#4bb4f5"
+    },
+    {
+      "name": "Agent",
+      "color": "#7e79b6"
+    }
+  ]
+}
